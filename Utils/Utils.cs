@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
@@ -16,12 +17,31 @@ namespace JCB_Utils
         public const double SHORT_WAIT_SECONDS = 0.5;
         public static readonly TimeSpan longWait = TimeSpan.FromSeconds(LONG_WAIT_SECONDS);
         public static readonly TimeSpan shortWait = TimeSpan.FromSeconds(SHORT_WAIT_SECONDS);
-        public virtual static string ConnectionString { get; set; }
+        private static string connString;
+        public static string ConnectionString
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(connString))
+                {
+                    connString = ConfigurationManager.ConnectionStrings["ConnectionString"].ConnectionString;
+                }
+
+                return connString;
+            }
+        }
 
         public static DataTable ExecuteSP(string StoredProcedureName, List<Parameter> ParametersList = null,
                                           string SortColumn = "", string connectionString = null)
         {
+            return ExecuteSP(StoredProcedureName, ref ParametersList, SortColumn, connectionString);
+        }
+
+        public static DataTable ExecuteSP(string StoredProcedureName, ref List<Parameter> ParametersList,
+                                          string SortColumn = "", string connectionString = null)
+        {
             DataTable toRet = null;
+            bool containsOutParameter = false;
             int retryCount = 0;
             string connString = !string.IsNullOrEmpty(connectionString) ? connectionString : JCUtils.ConnectionString;
 
@@ -39,16 +59,24 @@ namespace JCB_Utils
                             cmd.CommandType = CommandType.StoredProcedure;
                             cmd.CommandText = StoredProcedureName;
 
+                            //make sure that we have a parameter
                             if (ParametersList != null && ParametersList.Count > 0)
                             {
                                 for (int i = 0; i < ParametersList.Count; i++)
                                     if (ParametersList[i] != null)
                                     {
-                                        cmd.Parameters.AddWithValue(ParametersList[i].Name, ParametersList[i].Value);
+                                        //Build output parameters along with their sqltype
+                                        if (ParametersList[i].IsOutput)
+                                        {
+                                            cmd.Parameters.Add(ParametersList[i].Name, ParametersList[i].SQLType).Direction = ParameterDirection.Output;
 
-                                        ///TODO: Implement output parameters functionality
-                                        //if (ParametersList[i].IsOutput)
-                                        //    cmd.Parameters[i].Direction = ParameterDirection.Output;
+                                            //this will be use to determined if we are expecting an output parameter
+                                            containsOutParameter = true;
+                                        }
+                                        else
+                                        {
+                                            cmd.Parameters.AddWithValue(ParametersList[i].Name, ParametersList[i].Value);
+                                        }
                                     }
                             }
 
@@ -63,8 +91,21 @@ namespace JCB_Utils
                                     if (!string.IsNullOrEmpty(SortColumn))
                                         ds.Tables[0].DefaultView.Sort = SortColumn;
 
+                                    //get the first result set to return it, if you get more result sets 
+                                    //you need to create an override with the needed functionality
                                     if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
                                         toRet = ds.Tables[0];
+
+                                    //if we have output parameters retrieve their values and assign them into 
+                                    //the ParameterList
+                                    if (containsOutParameter)
+                                    {
+                                        for (int i = 0; i < ParametersList.Count; i++)
+                                        {
+                                            if (ParametersList[i].IsOutput)
+                                                ParametersList[i].Value = cmd.Parameters[ParametersList[i].Name].Value;
+                                        }
+                                    }
 
                                     ds.Dispose();
                                 }
@@ -77,7 +118,7 @@ namespace JCB_Utils
                     if (sqlEX.Number == (int)RetryableSqlErrors.Timeout)
                     {
                         retryCount++;
-                        Thread.Sleep(JCUtils.longWait);
+                        Thread.Sleep(longWait);
                     }
                     else
                     {
@@ -97,7 +138,7 @@ namespace JCB_Utils
                         cmd = null;
                     }
                 }
-            } while (retryCount > 0 && retryCount < JCUtils.MAX_RETRY);
+            } while (retryCount > 0 && retryCount < MAX_RETRY);
 
             return toRet;
         }
