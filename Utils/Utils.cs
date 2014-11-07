@@ -12,23 +12,30 @@ namespace JCB_Utils
     [System.Serializable]
     public class JCUtils
     {
-        public const int MAX_RETRY = 2;
-        public const double LONG_WAIT_SECONDS = 5;
-        public const double SHORT_WAIT_SECONDS = 0.5;
-        public static readonly TimeSpan longWait = TimeSpan.FromSeconds(LONG_WAIT_SECONDS);
-        public static readonly TimeSpan shortWait = TimeSpan.FromSeconds(SHORT_WAIT_SECONDS);
-        private static string connString;
-        public static string ConnectionString
+        private const int MAX_RETRY = 2;
+        private const double LONG_WAIT_SECONDS = 5;
+        private const double SHORT_WAIT_SECONDS = 0.5;
+        private static readonly TimeSpan longWait = TimeSpan.FromSeconds(LONG_WAIT_SECONDS);
+        private static readonly TimeSpan shortWait = TimeSpan.FromSeconds(SHORT_WAIT_SECONDS);
+        private static string ConnectionString
         {
             get
             {
-                if (string.IsNullOrEmpty(connString))
-                {
-                    connString = ConfigurationManager.ConnectionStrings["ConnectionString"].ConnectionString;
-                }
-
-                return connString;
+                return ConfigurationManager.ConnectionStrings["ConnectionString"].ConnectionString;
             }
+        }
+
+        public static DataTable ExecuteSP(string StoredProcedureName, Parameter param, string ConnectionString = null)
+        {
+            List<Parameter> ParameterList = null;
+
+            if (param != null && !string.IsNullOrEmpty(param.Name))
+            {
+                ParameterList = new List<Parameter>();
+                ParameterList.Add(param);
+            }
+
+            return ExecuteSP(StoredProcedureName, ParameterList, ConnectionString);
         }
 
         public static DataTable ExecuteSP(string StoredProcedureName, List<Parameter> ParametersList = null,
@@ -63,7 +70,7 @@ namespace JCB_Utils
                             if (ParametersList != null && ParametersList.Count > 0)
                             {
                                 for (int i = 0; i < ParametersList.Count; i++)
-                                    if (ParametersList[i] != null)
+                                    if (ParametersList[i] != null && !string.IsNullOrEmpty(ParametersList[i].Name))
                                     {
                                         //Build output parameters along with their sqltype
                                         if (ParametersList[i].IsOutput)
@@ -149,10 +156,10 @@ namespace JCB_Utils
             List<T> toRet = new List<T>();
             var retryCount = 0;
             string connString = !string.IsNullOrEmpty(connectionString) ? connectionString : JCUtils.ConnectionString;
+            SqlCommand cmd = null;
 
             do
             {
-                SqlCommand cmd = null;
                 try
                 {
                     using (SqlConnection conn = new SqlConnection(connString))
@@ -172,6 +179,115 @@ namespace JCB_Utils
 
                             using (SqlDataReader dr = cmd.ExecuteReader())
                                 toRet = DataReaderMapToList<T>(dr);
+                        }
+                    }
+                }
+                catch (SqlException sqlEX)
+                {
+                    if (sqlEX.Number == (int)RetryableSqlErrors.Timeout)
+                    {
+                        retryCount++;
+                        Thread.Sleep(JCUtils.longWait);
+                    }
+                    else
+                        throw;
+                }
+                catch
+                {
+                    throw;
+                }
+                finally
+                {
+                    if (cmd != null)
+                    {
+                        cmd.Connection.Close();
+                        cmd.Dispose();
+                        cmd = null;
+                    }
+                }
+            } while (retryCount > 0 && retryCount < MAX_RETRY);
+
+            return toRet;
+        }
+
+        public static T ExecuteScalar<T>(string StoredProcedureName, Parameter param, string connectionString = null)
+        {
+            List<Parameter> ParameterList = null;
+
+            if (param != null && !string.IsNullOrEmpty(param.Name))
+            {
+                ParameterList = new List<Parameter>();
+                ParameterList.Add(param);
+            }
+
+            return ExecuteScalar<T>(StoredProcedureName, ParameterList, connectionString);
+        }
+
+        public static T ExecuteScalar<T>(string StoredProcedureName, List<Parameter> ParametersList = null, string connectionString = null)
+        {
+            return ExecuteScalar<T>(StoredProcedureName, ref ParametersList, connectionString);
+        }
+
+        public static T ExecuteScalar<T>(string StoredProcedureName,ref List<Parameter> ParametersList, string connectionString = null)
+        {
+            var toRet = default(T);
+            var retryCount = 0;
+
+            bool containsOutParameter = false;
+
+            string connString = !string.IsNullOrEmpty(connectionString) ? connectionString : JCUtils.ConnectionString;
+
+            SqlCommand cmd = null;
+
+            do
+            {
+                try
+                {
+                    using (SqlConnection conn = new SqlConnection(connString))
+                    {
+                        using (cmd = conn.CreateCommand())
+                        {
+                            cmd.CommandTimeout = conn.ConnectionTimeout;
+                            cmd.CommandType = CommandType.StoredProcedure;
+                            cmd.CommandText = StoredProcedureName;
+
+                            //make sure that we have a parameter
+                            if (ParametersList != null && ParametersList.Count > 0)
+                                for (int i = 0; i < ParametersList.Count; i++)
+                                    if (ParametersList[i] != null)
+                                    {
+                                        //Build output parameters along with their sqltype
+                                        if (ParametersList[i].IsOutput)
+                                        {
+                                            cmd.Parameters.Add(ParametersList[i].Name, ParametersList[i].SQLType).Direction = ParameterDirection.Output;
+
+                                            //this will be use to determined if we are expecting an output parameter
+                                            containsOutParameter = true;
+                                        }
+                                        else
+                                        {
+                                            cmd.Parameters.AddWithValue(ParametersList[i].Name, ParametersList[i].Value);
+                                        }
+                                    }
+
+                            conn.Open();
+
+                            var res = cmd.ExecuteScalar();
+
+                            //check that the returned type corresponds to the expected type
+                            if (res != null && typeof(T) == res.GetType())
+                                toRet = (T)res;
+
+                            //if we have output parameters retrieve their values and assign them into 
+                            //the ParameterList
+                            if (containsOutParameter)
+                            {
+                                for (int i = 0; i < ParametersList.Count; i++)
+                                {
+                                    if (ParametersList[i].IsOutput)
+                                        ParametersList[i].Value = cmd.Parameters[ParametersList[i].Name].Value;
+                                }
+                            }
                         }
                     }
                 }

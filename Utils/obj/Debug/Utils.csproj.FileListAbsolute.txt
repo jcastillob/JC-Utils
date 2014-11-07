@@ -1,0 +1,5 @@
+C:\Users\juan.r.castillo\Documents\GitHub\JC-Utils\Utils\bin\Debug\JCB_Utils.dll
+C:\Users\juan.r.castillo\Documents\GitHub\JC-Utils\Utils\bin\Debug\JCB_Utils.pdb
+C:\Users\juan.r.castillo\Documents\GitHub\JC-Utils\Utils\obj\Debug\Utils.csprojResolveAssemblyReference.cache
+C:\Users\juan.r.castillo\Documents\GitHub\JC-Utils\Utils\obj\Debug\JCB_Utils.dll
+C:\Users\juan.r.castillo\Documents\GitHub\JC-Utils\Utils\obj\Debug\JCB_Utils.pdb
