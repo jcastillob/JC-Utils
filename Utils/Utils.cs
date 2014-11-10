@@ -94,14 +94,16 @@ namespace JCB_Utils
                                 {
                                     da.Fill(ds);
 
-                                    //Sort results if we received a sort column
-                                    if (!string.IsNullOrEmpty(SortColumn))
-                                        ds.Tables[0].DefaultView.Sort = SortColumn;
-
                                     //get the first result set to return it, if you get more result sets 
                                     //you need to create an override with the needed functionality
-                                    if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                                    if (ds != null && ds.Tables != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+                                    {
+                                        //Sort results if we received a sort column
+                                        if (!string.IsNullOrEmpty(SortColumn))
+                                            ds.Tables[0].DefaultView.Sort = SortColumn;
+
                                         toRet = ds.Tables[0];
+                                    }
 
                                     //if we have output parameters retrieve their values and assign them into 
                                     //the ParameterList
