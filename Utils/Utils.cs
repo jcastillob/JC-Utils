@@ -104,17 +104,13 @@ namespace JCB_Utils
 
                                         toRet = ds.Tables[0];
                                     }
-                                     
+
                                     //if we have output parameters retrieve their values and assign them into 
                                     //the ParameterList
                                     if (containsOutParameter)
-                                    {
                                         for (int i = 0; i < ParametersList.Count; i++)
-                                        {
                                             if (ParametersList[i].IsOutput)
                                                 ParametersList[i].Value = cmd.Parameters[ParametersList[i].Name].Value;
-                                        }
-                                    }
 
                                     ds.Dispose();
                                 }
