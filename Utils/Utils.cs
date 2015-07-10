@@ -50,7 +50,7 @@ namespace JCB_Utils
             DataTable toRet = null;
             bool containsOutParameter = false;
             int retryCount = 0;
-            string connString = !string.IsNullOrEmpty(connectionString) ? connectionString : JCUtils.ConnectionString;
+            string connString = !string.IsNullOrEmpty(connectionString) ? connectionString : ConnectionString;
 
             do
             {
@@ -153,7 +153,7 @@ namespace JCB_Utils
         {
             List<T> toRet = new List<T>();
             var retryCount = 0;
-            string connString = !string.IsNullOrEmpty(connectionString) ? connectionString : JCUtils.ConnectionString;
+            string connString = !string.IsNullOrEmpty(connectionString) ? connectionString : ConnectionString;
             SqlCommand cmd = null;
 
             do
@@ -185,7 +185,7 @@ namespace JCB_Utils
                     if (sqlEX.Number == (int)RetryableSqlErrors.Timeout)
                     {
                         retryCount++;
-                        Thread.Sleep(JCUtils.longWait);
+                        Thread.Sleep(longWait);
                     }
                     else
                         throw;
@@ -381,6 +381,51 @@ namespace JCB_Utils
             {
                 throw;
             }
+        }
+
+        public static string FormatPhoneNumber(string phoneNumber)
+        {
+
+            if (String.IsNullOrEmpty(phoneNumber))
+                return phoneNumber;
+            else
+                phoneNumber = System.Text.RegularExpressions.Regex.Replace(phoneNumber, @"[^\d+]", "");
+
+            System.Text.RegularExpressions.Regex phoneParser = null;
+            string format = "";
+
+            switch (phoneNumber.Length)
+            {
+                case 10:    //(123) 456-7890
+                    phoneParser = new System.Text.RegularExpressions.Regex(@"(\d{3})(\d{3})(\d{4})");
+                    format = "($1) $2-$3";
+                    break;
+                case 11:    //(123) 567-8900 x1
+                    phoneParser = new System.Text.RegularExpressions.Regex(@"(\d{3})(\d{3})(\d{4})(\d{1})");
+                    format = "($1) $2-$3 x$4";
+                    break;
+                case 12:    //(123) 567-8900 x12
+                    phoneParser = new System.Text.RegularExpressions.Regex(@"(\d{3})(\d{3})(\d{4})(\d{2})");
+                    format = "($1) $2-$3 x$4";
+                    break;
+                case 13:    //(123) 567-8900 x123
+                    phoneParser = new System.Text.RegularExpressions.Regex(@"(\d{3})(\d{3})(\d{4})(\d{3})");
+                    format = "($1) $2-$3 x$4";
+                    break;
+                case 14:    //(123) 567-8900 x1234
+                    phoneParser = new System.Text.RegularExpressions.Regex(@"(\d{3})(\d{3})(\d{4})(\d{4})");
+                    format = "($1) $2-$3 x$4";
+                    break;
+                case 15:    //(123) 567-8900 x12345
+                    phoneParser = new System.Text.RegularExpressions.Regex(@"(\d{3})(\d{3})(\d{4})(\d{5})");
+                    format = "($1) $2-$3 x$4";
+                    break;
+                default:
+                    return phoneNumber;
+
+            }//switch
+
+            return phoneParser.Replace(phoneNumber, format);
         }
     }
 
